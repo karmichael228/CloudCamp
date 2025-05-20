@@ -14,7 +14,6 @@ env:
   value: "karmichael228"
 ```
 
-![Запуск. Часть 1](../images/3_1.png)
 
 ### 2. Readiness и Liveness пробы
 
