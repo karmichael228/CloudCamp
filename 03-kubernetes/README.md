@@ -39,7 +39,7 @@ livenessProbe:
 
 ### 3. Использование образа из приватного репозитория
 
-Настроено использование приватного регистра с помощью секции `imagePullSecrets` в `deployment.yaml`
+Настроено использование приватного регистри с помощью секции `imagePullSecrets` в `deployment.yaml`
 
 ### 4. Ingress Controller
 Настроен Ingress-ресурс в файле `ingress.yaml`
