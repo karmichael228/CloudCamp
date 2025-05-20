@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: echo-server
+  labels:
+    app: echo-server
+    environment: production
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}" 

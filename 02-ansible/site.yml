@@ -1,0 +1,12 @@
+---
+# Echo Server Deployment Playbook
+# This playbook sets up Docker, deploys multiple instances of the echo-server application,
+# and configures Nginx as a load balancer.
+
+- name: Setup Echo Server Environment
+  hosts: echo_servers
+  become: true
+  roles:
+    - docker
+    - app
+    - nginx 

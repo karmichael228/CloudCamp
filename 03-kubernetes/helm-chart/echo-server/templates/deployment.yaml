@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-server
+  namespace: echo-server
+  labels:
+    app: echo-server
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: echo-server
+  template:
+    metadata:
+      labels:
+        app: echo-server
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: echo-server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: AUTHOR
+          value: {{ .Values.author | quote }}
+        ports:
+        - containerPort: {{ .Values.service.targetPort }}
+          name: http
+        readinessProbe:
+          {{- toYaml .Values.probes.readiness | nindent 10 }}
+        livenessProbe:
+          {{- toYaml .Values.probes.liveness | nindent 10 }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }} 

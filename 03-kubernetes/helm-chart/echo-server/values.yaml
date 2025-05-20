@@ -1,0 +1,52 @@
+# Default values for Echo-Server Helm chart
+replicaCount: 3
+
+image:
+  repository: karmichael228/echo-server
+  tag: "1.0"
+  pullPolicy: Always
+
+author: "karmichael228"
+
+imagePullSecrets:
+  - name: docker-registry-secret
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  host: "echo-server.example.com"
+  path: "/"
+  pathType: Prefix
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+probes:
+  readiness:
+    httpGet:
+      path: /
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+  liveness:
+    httpGet:
+      path: /
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3 

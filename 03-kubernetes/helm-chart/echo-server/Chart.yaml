@@ -1,0 +1,9 @@
+apiVersion: v2
+name: echo-server
+description: A Helm chart for Echo-Server Application
+type: application
+version: 0.1.0
+appVersion: 1.0.0
+maintainers:
+  - name: karmichael228
+    email: placeholder@example.com 

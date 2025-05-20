@@ -1,0 +1,63 @@
+---
+# Установка Docker CE
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install prerequisites
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+    state: present
+
+- name: Add Docker's official GPG key
+  apt_key:
+    url: "{{ docker_apt_key_url }}"
+    state: present
+
+- name: Set up the Docker repository
+  apt_repository:
+    repo: "{{ docker_apt_repository }}"
+    state: present
+    update_cache: yes
+
+- name: Install Docker CE
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+
+- name: Install Python Docker module
+  apt:
+    name: python3-docker
+    state: present
+
+- name: Ensure Docker service is enabled and started
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add user to docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+  register: docker_user_added
+
+- name: Log in to Docker registry
+  docker_login:
+    registry_url: https://index.docker.io/v1/
+    username: karmichael228
+    password: "{{ docker_registry_password | default('YOUR_PASSWORD') }}"
+  no_log: true
+  ignore_errors: true 
