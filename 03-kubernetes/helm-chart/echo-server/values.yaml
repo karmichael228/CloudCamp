@@ -4,7 +4,7 @@ replicaCount: 3
 image:
   repository: karmichael228/echo-server
   tag: "1.0"
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
 author: "karmichael228"
 
@@ -19,7 +19,7 @@ service:
 ingress:
   enabled: true
   className: "nginx"
-  host: "echo-server.example.com"
+  host: "echo-server.local"
   path: "/"
   pathType: Prefix
 

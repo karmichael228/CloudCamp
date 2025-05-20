@@ -20,7 +20,7 @@ spec:
       containers:
       - name: echo-server
         image: karmichael228/echo-server:1.0
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         env:
         - name: AUTHOR
           value: "karmichael228"

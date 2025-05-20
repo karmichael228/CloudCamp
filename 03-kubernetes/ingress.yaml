@@ -8,7 +8,7 @@ metadata:
     kubernetes.io/ingress.class: "nginx"
 spec:
   rules:
-  - host: echo-server.example.com  # Replace with your actual domain
+  - host: echo-server.local
     http:
       paths:
       - path: /
