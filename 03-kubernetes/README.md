@@ -79,7 +79,7 @@ kubectl get namespaces | grep echo-server
 
 ![3_2](../images/3_2.png)
 
-### 3. Настройка доступа к приватному Docker-регистру
+### 3. Настройка доступа к приватному Docker-репозиторию
 
 ```bash
 # Создаю секрет для доступа к DockerHub
