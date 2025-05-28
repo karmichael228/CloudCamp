@@ -1,25 +1,41 @@
 ---
-# Деплою несколько контейнеров приложения
-
-- name: Stop and remove existing Echo-Server containers if they exist
-  docker_container:
-    name: "{{ app_container_name_prefix }}-{{ item }}"
-    state: absent
-  with_sequence: start=1 end={{ app_container_count }}
-  ignore_errors: true
+# Деплой приложения
 
 - name: Pull Echo-Server image
   docker_image:
     name: "{{ app_image }}"
     source: pull
-    force_source: yes
+  register: image_pull_result
+
+- name: Log image update status
+  debug:
+    msg: "Image update required: {{ image_pull_result.changed }}"
 
 - name: Create a network for Echo-Server applications
   docker_network:
     name: echo_network
     state: present
 
-- name: Launch Echo-Server containers
+- name: Get current running containers
+  docker_container_info:
+    name: "{{ app_container_name_prefix }}-{{ item }}"
+  with_sequence: start=1 end={{ app_container_count }}
+  register: current_containers
+  ignore_errors: true
+
+- name: Rolling update - Deploy containers one by one
+  include_tasks: rolling_update_container.yml
+  with_sequence: start=1 end={{ app_container_count }}
+  loop_control:
+    loop_var: container_index
+  when: image_pull_result.changed
+
+- name: Skip update - Image is already up to date
+  debug:
+    msg: "Skipping container update - image {{ app_image }} is already the latest version"
+  when: not image_pull_result.changed
+
+- name: Ensure containers are running (no update needed)
   docker_container:
     name: "{{ app_container_name_prefix }}-{{ item }}"
     image: "{{ app_image }}"
@@ -29,22 +45,38 @@
     networks:
       - name: echo_network
     env:
-      AUTHOR: "karmichael228"
-    published_ports: [] 
-    recreate: true
+      AUTHOR: "{{ app_author }}"
     healthcheck:
       test: ["CMD-SHELL", "sleep 5 && curl -f http://localhost:8000 || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
       start_period: 30s
+      retries: 3
   with_sequence: start=1 end={{ app_container_count }}
-  register: deployed_containers
+  when: not image_pull_result.changed
+
+- name: Get final container information
+  docker_container_info:
+    name: "{{ app_container_name_prefix }}-{{ item }}"
+  with_sequence: start=1 end={{ app_container_count }}
+  register: final_containers
+  ignore_errors: true
+
+- name: Wait for all containers to be healthy
+  docker_container_info:
+    name: "{{ app_container_name_prefix }}-{{ item }}"
+  with_sequence: start=1 end={{ app_container_count }}
+  register: health_check_results
+  until: health_check_results.container.State.Health.Status == "healthy"
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  when: final_containers.results[item|int - 1].exists
 
 - name: Create a list of container IPs for Nginx config
   set_fact:
     echo_server_containers: "{{ echo_server_containers | default([]) + [{'name': item.container.Name, 'ip': item.container.NetworkSettings.Networks.echo_network.IPAddress}] }}"
-  with_items: "{{ deployed_containers.results }}"
+  with_items: "{{ final_containers.results }}"
+  when: item.exists
 
 - name: Debug container IPs
   debug:

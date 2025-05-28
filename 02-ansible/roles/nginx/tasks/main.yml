@@ -1,40 +1,187 @@
 ---
-# Разворачиваю nginx как балансировщик нагрузки
-
-- name: Stop and remove existing Nginx container if it exists
-  docker_container:
-    name: "{{ nginx_container_name }}"
-    state: absent
-  ignore_errors: true
+# Nginx deployment с тремя простыми сценариями:
+# 1. Первый запуск — создаем контейнер
+# 2. Новый образ — пересоздаем контейнер с новым образом  
+# 3. Изменение конфига — выполняем nginx -s reload
 
 - name: Create Nginx configuration directory
   file:
-    path: /opt/nginx/conf
+    path: "{{ nginx_conf_dir }}"
     state: directory
     mode: '0755'
 
-- name: Generate Nginx configuration
+- name: Generate new Nginx configuration
   template:
     src: nginx.conf.j2
-    dest: /opt/nginx/conf/nginx.conf
+    dest: "{{ nginx_conf_dir }}/nginx.conf"
     mode: '0644'
+  register: nginx_config
+
+- name: Check if current Nginx container exists
+  docker_container_info:
+    name: "{{ nginx_container_name }}"
+  register: nginx_info
+  ignore_errors: true
 
 - name: Pull the Nginx image
   docker_image:
     name: nginx:latest
     source: pull
+  register: nginx_image
 
-- name: Run Nginx container
-  docker_container:
-    name: "{{ nginx_container_name }}"
-    image: nginx:latest
-    state: started
-    restart_policy: always
-    platform: linux/amd64
-    networks:
-      - name: echo_network
-    published_ports:
-      - "{{ nginx_host_port }}:{{ nginx_container_port }}"
-    volumes:
-      - /opt/nginx/conf/nginx.conf:/etc/nginx/nginx.conf:ro
-    recreate: true 
+- name: Set update flags
+  set_fact:
+    container_exists: "{{ nginx_info.exists }}"
+    config_changed: "{{ nginx_config.changed }}"
+    image_changed: "{{ nginx_image.changed }}"
+
+- name: Log deployment scenario
+  debug:
+    msg: |
+      Deployment scenario analysis:
+      - Container exists: {{ container_exists }}
+      - Config changed: {{ config_changed }}
+      - Image changed: {{ image_changed }}
+      
+      Action: {% if not container_exists %}First deployment{% elif image_changed %}Blue-Green deployment{% elif config_changed %}In-place config reload{% else %}No action needed{% endif %}
+
+# СЦЕНАРИЙ 1: Первый запуск — просто поднимаем контейнер
+- name: "SCENARIO 1: First deployment"
+  block:
+    - name: Deploy initial Nginx container
+      docker_container:
+        name: "{{ nginx_container_name }}"
+        image: nginx:latest
+        state: started
+        restart_policy: always
+        platform: linux/amd64
+        networks:
+          - name: echo_network
+        published_ports:
+          - "{{ nginx_host_port }}:{{ nginx_container_port }}"
+        volumes:
+          - "{{ nginx_conf_dir }}/nginx.conf:/etc/nginx/nginx.conf:ro"
+        labels:
+          deployment: "initial"
+        healthcheck:
+          test: ["CMD-SHELL", "curl -f http://localhost:{{ nginx_container_port }}/health || exit 1"]
+          interval: 10s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+
+    - name: Wait for initial container to be healthy
+      docker_container_info:
+        name: "{{ nginx_container_name }}"
+      register: initial_health
+      until: initial_health.container.State.Health.Status == "healthy"
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    - name: Log first deployment success
+      debug:
+        msg: "Initial Nginx deployment completed successfully"
+
+  when: not container_exists
+
+# СЦЕНАРИЙ 2: Новый образ — простое обновление контейнера
+- name: "SCENARIO 2: Simple container update for new image"
+  block:
+    - name: Stop current container
+      docker_container:
+        name: "{{ nginx_container_name }}"
+        state: stopped
+
+    - name: Remove old container
+      docker_container:
+        name: "{{ nginx_container_name }}"
+        state: absent
+
+    - name: Deploy updated container with new image
+      docker_container:
+        name: "{{ nginx_container_name }}"
+        image: nginx:latest
+        state: started
+        restart_policy: always
+        platform: linux/amd64
+        networks:
+          - name: echo_network
+        published_ports:
+          - "{{ nginx_host_port }}:{{ nginx_container_port }}"
+        volumes:
+          - "{{ nginx_conf_dir }}/nginx.conf:/etc/nginx/nginx.conf:ro"
+        labels:
+          deployment: "updated"
+        healthcheck:
+          test: ["CMD-SHELL", "curl -f http://localhost:{{ nginx_container_port }}/health || exit 1"]
+          interval: 10s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+
+    - name: Wait for updated container to be healthy
+      docker_container_info:
+        name: "{{ nginx_container_name }}"
+      register: updated_health
+      until: updated_health.container.State.Health.Status == "healthy"
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    - name: Verify updated deployment
+      uri:
+        url: "http://localhost:{{ nginx_host_port }}"
+        method: GET
+        timeout: 10
+      retries: 3
+      delay: 2
+
+    - name: Log simple update success
+      debug:
+        msg: "Nginx container updated successfully with new image"
+
+  when: container_exists and image_changed
+
+# СЦЕНАРИЙ 3: Только конфиг — выполняем in-place nginx -s reload
+- name: "SCENARIO 3: In-place configuration reload"
+  block:
+    - name: Reload Nginx configuration
+      shell: |
+        docker exec {{ nginx_container_name }} nginx -s reload
+
+    - name: Verify configuration reload
+      uri:
+        url: "http://localhost:{{ nginx_host_port }}/health"
+        method: GET
+        timeout: 10
+      retries: 3
+      delay: 2
+
+    - name: Log configuration reload success
+      debug:
+        msg: "Nginx configuration reloaded successfully without downtime"
+
+  when: container_exists and not image_changed and config_changed
+
+# СЦЕНАРИЙ 4: Ничего не изменилось — просто проверяем что контейнер работает
+- name: "SCENARIO 4: No changes - ensure container is running"
+  block:
+    - name: Ensure container is running
+      docker_container:
+        name: "{{ nginx_container_name }}"
+        state: started
+
+    - name: Log no changes
+      debug:
+        msg: "No changes detected. Nginx container is already up to date and running."
+
+  when: container_exists and not image_changed and not config_changed
+
+- name: Verify final deployment
+  uri:
+    url: "http://localhost:{{ nginx_host_port }}"
+    method: GET
+    timeout: 10
+  register: final_test
+  retries: 3
+  delay: 2
+  when: container_exists or nginx_config.changed or image_changed 

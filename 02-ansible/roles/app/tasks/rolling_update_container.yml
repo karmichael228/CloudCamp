@@ -1,0 +1,47 @@
+---
+# Rolling update для одного контейнера
+
+- name: "Check if container {{ app_container_name_prefix }}-{{ container_index }} exists"
+  docker_container_info:
+    name: "{{ app_container_name_prefix }}-{{ container_index }}"
+  register: container_info
+  ignore_errors: true
+
+- name: "Deploy new container {{ app_container_name_prefix }}-{{ container_index }}"
+  docker_container:
+    name: "{{ app_container_name_prefix }}-{{ container_index }}"
+    image: "{{ app_image }}"
+    state: started
+    restart_policy: always
+    platform: linux/amd64
+    networks:
+      - name: echo_network
+    env:
+      AUTHOR: "{{ app_author }}"
+    published_ports: []
+    recreate: true
+    healthcheck:
+      test: ["CMD-SHELL", "sleep 5 && curl -f http://localhost:8000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  register: new_container
+
+- name: "Wait for container {{ app_container_name_prefix }}-{{ container_index }} to be healthy"
+  docker_container_info:
+    name: "{{ app_container_name_prefix }}-{{ container_index }}"
+  register: container_health
+  until: container_health.container.State.Health.Status == "healthy"
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  when: new_container.changed
+
+- name: "Log successful deployment of {{ app_container_name_prefix }}-{{ container_index }}"
+  debug:
+    msg: "Container {{ app_container_name_prefix }}-{{ container_index }} successfully deployed and healthy"
+
+- name: "Wait between container deployments for stability"
+  pause:
+    seconds: "{{ rolling_update_delay }}"
+  when: container_index|int < app_container_count|int 

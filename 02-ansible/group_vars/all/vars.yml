@@ -1,15 +1,23 @@
 ---
-# конфиг для установки docker
+# переменные:
+# для установки docker
 docker_apt_key_url: "https://download.docker.com/linux/ubuntu/gpg"
 docker_apt_repository: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
 
-# конфиг для приложения
+#  для приложения
 app_image: "karmichael228/echo-server:1.0"
 app_container_name_prefix: "echo-server"
 app_container_count: 3
 app_container_port: 8000
+app_author: "karmichael228"
 
-# конфиг для nginx
+# для nginx
 nginx_container_name: "nginx-lb"
 nginx_host_port: 80
-nginx_container_port: 80 
+nginx_container_port: 80
+nginx_conf_dir: "/opt/nginx/conf"
+
+# для rolling update
+rolling_update_delay: 10  
+health_check_retries: 12 
+health_check_delay: 5 
